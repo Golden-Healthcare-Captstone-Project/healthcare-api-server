@@ -7,7 +7,7 @@ app = FastAPI(title="Golden HealthCare Service API")
 
 #CORS Config Section
 #Empty List will host frontend origins for CORS
-origins = []
+origins = ["http://localhost:4200"]
 
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["*"])
 
