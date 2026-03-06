@@ -22,3 +22,27 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+
+# Python Specific
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Project Specific (FastAPI/Vercel)
+.vercel
+.pytest_cache/
+htmlcov/
+.coverage
+
+# OS Specific
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
