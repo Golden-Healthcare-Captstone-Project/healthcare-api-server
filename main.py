@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from models import ServiceRequest
 from datetime import datetime
+import uuid
 
 app = FastAPI(title="Golden HealthCare Service API")
 
@@ -12,7 +13,7 @@ dashboard_db = []
 #Empty List will host frontend origins for CORS
 origins = ["http://localhost:4200", "https://healthcare-web-client.vercel.app"]
 
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS", "PATCH"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS", "PATCH", "DELETE"], allow_headers=["*"])
 
 #Deployment Config
 #A simple root check for now
@@ -34,7 +35,17 @@ async def update_request_status(request_id: str, new_status: str):
         if request.get("id") == request_id:
             request["status"] = new_status
             return {"success": True, "updated_request": request}
-    return {"success": False, "message": "Error: Request not found."}
+    raise HTTPException(status_code=404, detail="Request not found")
+
+@app.delete("/api/admin/request/{request_id}")
+async def delete_request(request_id: str):
+    global dashboard_db
+    initial_length = len(dashboard_db)
+    dashboard_db = [req for req in dashboard_db if req.get("id") != request_id]
+
+    if len(dashboard_db) < initial_length:
+        return {"success": True, "message": f"Request with ID {request_id} deleted."}
+    raise HTTPException(status_code=404, detail="Request not found")
 
 @app.post("/api/service-request")
 async def create_service_request(request: ServiceRequest):
