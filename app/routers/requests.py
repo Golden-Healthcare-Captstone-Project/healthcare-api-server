@@ -26,3 +26,8 @@ def create_service_request(request: ServiceRequestCreate, db: Session = Depends(
     db.commit()
     db.refresh(new_request)
     return new_request
+
+
+@router.get("/")
+def get_requests(db: Session = Depends(get_db)):
+    return db.query(ServiceRequest).all()
