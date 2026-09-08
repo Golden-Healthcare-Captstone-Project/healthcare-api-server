@@ -59,3 +59,22 @@ class Payment(Base):
 
     user = relationship("User", back_populates="payments")
     service_request = relationship("ServiceRequest", back_populates="payment")
+
+
+class MetaConnection(Base):
+    __tablename__ = "meta_connections"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    fb_user_id = Column(String)
+    user_access_token = Column(String)  # long-lived USER token (~60 days)
+    user_token_expires_at = Column(DateTime)
+
+    page_id = Column(String)
+    page_name = Column(String)
+    page_access_token = Column(String)
+
+    ig_business_account_id = Column(String)
+
+    connected_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

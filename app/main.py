@@ -6,6 +6,7 @@ from .database import engine
 from .models import Base
 from .routers import services
 from app.routers import social_media
+from .routers import meta_auth
 
 
 
@@ -30,3 +31,4 @@ app.include_router(services.router)
 from .routers import requests
 
 app.include_router(requests.router)
+app.include_router(meta_auth.router)

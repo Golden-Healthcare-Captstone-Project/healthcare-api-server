@@ -1,0 +1,14 @@
+name: Refresh Meta Token
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call refresh endpoint
+        run: |
+          curl -sf -X POST "${{ secrets.META_REFRESH_URL }}?secret=${{ secrets.META_ADMIN_SECRET }}"

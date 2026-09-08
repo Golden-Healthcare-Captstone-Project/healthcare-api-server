@@ -1,22 +1,32 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 import requests
-import os
+
+from ..database import SessionLocal
+from ..models import MetaConnection
 
 router = APIRouter()
 
-@router.get("/social-feed")
-def get_social_feed():
-    page_id = os.getenv("META_PAGE_ID")
-    access_token = os.getenv("META_ACCESS_TOKEN")
 
-    if not page_id or not access_token:
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@router.get("/social-feed")
+def get_social_feed(db: Session = Depends(get_db)):
+    conn = db.query(MetaConnection).first()
+    if not conn or not conn.page_id or not conn.page_access_token:
         return {
             "status": "blocked",
-            "message": "Meta credentials not configured"
+            "message": "Meta account not connected"
         }
 
-    url = f"https://graph.facebook.com/v19.0/{page_id}/posts"
-    params = {"access_token": access_token}
+    url = f"https://graph.facebook.com/v19.0/{conn.page_id}/posts"
+    params = {"access_token": conn.page_access_token}
 
     try:
         response = requests.get(url, params=params)
