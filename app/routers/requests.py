@@ -27,8 +27,7 @@ def create_service_request(request: ServiceRequestCreate, db: Session = Depends(
     db.refresh(new_request)
     return new_request
 
-@router.get("/mockfee" \
-"d")
+@router.get("/mockfeed")
 def get_mock_feed():
     return [
         {

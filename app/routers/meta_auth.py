@@ -2,13 +2,13 @@ import logging
 import secrets
 from datetime import datetime, timedelta
 
-import requests
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from .. import config
 from ..database import SessionLocal
+from ..meta_client import graph_get, MetaGraphAPIError, MetaRateLimitedError
 from ..models import MetaConnection
 
 router = APIRouter(prefix="/auth/meta", tags=["Meta Auth"])
@@ -42,7 +42,7 @@ def get_connection(db: Session) -> MetaConnection:
 
 
 def exchange_long_lived_token(short_lived_or_current_token: str) -> dict:
-    response = requests.get(
+    return graph_get(
         f"{GRAPH_API_BASE}/oauth/access_token",
         params={
             "grant_type": "fb_exchange_token",
@@ -51,17 +51,14 @@ def exchange_long_lived_token(short_lived_or_current_token: str) -> dict:
             "fb_exchange_token": short_lived_or_current_token,
         },
     )
-    response.raise_for_status()
-    return response.json()
 
 
 def fetch_page_and_ig_info(user_access_token: str) -> dict:
-    accounts_response = requests.get(
+    accounts_data = graph_get(
         f"{GRAPH_API_BASE}/me/accounts",
         params={"access_token": user_access_token},
     )
-    accounts_response.raise_for_status()
-    accounts = accounts_response.json().get("data", [])
+    accounts = accounts_data.get("data", [])
     if not accounts:
         return {}
 
@@ -71,14 +68,14 @@ def fetch_page_and_ig_info(user_access_token: str) -> dict:
 
     ig_business_account_id = None
     if page_id and page_access_token:
-        ig_response = requests.get(
-            f"{GRAPH_API_BASE}/{page_id}",
-            params={"fields": "instagram_business_account", "access_token": page_access_token},
-        )
-        if ig_response.ok:
-            ig_business_account_id = (
-                ig_response.json().get("instagram_business_account", {}).get("id")
+        try:
+            ig_data = graph_get(
+                f"{GRAPH_API_BASE}/{page_id}",
+                params={"fields": "instagram_business_account", "access_token": page_access_token},
             )
+            ig_business_account_id = ig_data.get("instagram_business_account", {}).get("id")
+        except (MetaGraphAPIError, MetaRateLimitedError) as e:
+            logger.warning("IG business account lookup failed for page_id=%s: %s", page_id, type(e).__name__)
 
     return {
         "page_id": page_id,
@@ -117,23 +114,29 @@ def meta_callback(request: Request, code: str, state: str, db: Session = Depends
     if not cookie_state or cookie_state != state:
         raise HTTPException(status_code=400, detail="Invalid or missing state")
 
-    short_lived_response = requests.get(
-        f"{GRAPH_API_BASE}/oauth/access_token",
-        params={
-            "client_id": config.META_APP_ID,
-            "redirect_uri": config.META_REDIRECT_URI,
-            "client_secret": config.META_APP_SECRET,
-            "code": code,
-        },
-    )
-    short_lived_response.raise_for_status()
-    short_lived_token = short_lived_response.json().get("access_token")
+    try:
+        short_lived_data = graph_get(
+            f"{GRAPH_API_BASE}/oauth/access_token",
+            params={
+                "client_id": config.META_APP_ID,
+                "redirect_uri": config.META_REDIRECT_URI,
+                "client_secret": config.META_APP_SECRET,
+                "code": code,
+            },
+        )
+        short_lived_token = short_lived_data.get("access_token")
 
-    long_lived_data = exchange_long_lived_token(short_lived_token)
-    long_lived_token = long_lived_data.get("access_token")
-    expires_in = long_lived_data.get("expires_in")
+        long_lived_data = exchange_long_lived_token(short_lived_token)
+        long_lived_token = long_lived_data.get("access_token")
+        expires_in = long_lived_data.get("expires_in")
 
-    page_and_ig_info = fetch_page_and_ig_info(long_lived_token)
+        page_and_ig_info = fetch_page_and_ig_info(long_lived_token)
+    except MetaRateLimitedError:
+        logger.warning("Meta OAuth callback rate-limited")
+        raise HTTPException(status_code=503, detail="Meta is rate-limiting requests, try again shortly")
+    except MetaGraphAPIError as e:
+        logger.error("Meta OAuth callback failed: status=%s error_code=%s", e.status_code, e.meta_error_code)
+        raise HTTPException(status_code=502, detail="Meta authentication failed")
 
     conn = get_connection(db)
     conn.user_access_token = long_lived_token
@@ -185,6 +188,14 @@ def meta_refresh(secret: str = None, db: Session = Depends(get_db)):
 
         db.commit()
         return {"status": "refreshed"}
+    except MetaRateLimitedError:
+        db.rollback()
+        logger.warning("Meta token refresh rate-limited")
+        return {"status": "rate_limited"}
+    except MetaGraphAPIError as e:
+        db.rollback()
+        logger.error("Meta token refresh failed: status=%s error_code=%s", e.status_code, e.meta_error_code)
+        return {"status": "error", "detail": "meta_api_error"}
     except Exception as e:
         db.rollback()
         logger.error("Meta token refresh failed: %s", type(e).__name__)
