@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from .. import config
-from ..database import SessionLocal
+from ..database import get_db
 from ..meta_client import graph_get, MetaGraphAPIError, MetaRateLimitedError
 from ..models import MetaConnection
 
@@ -18,14 +18,6 @@ logger = logging.getLogger(__name__)
 GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
 STATE_COOKIE_NAME = "meta_oauth_state"
 META_SCOPES = "pages_show_list,pages_read_engagement,instagram_basic,instagram_manage_insights,business_management"
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def require_admin_secret(secret: str = None):
@@ -133,7 +125,7 @@ def meta_callback(request: Request, code: str, state: str, db: Session = Depends
         page_and_ig_info = fetch_page_and_ig_info(long_lived_token)
     except MetaRateLimitedError:
         logger.warning("Meta OAuth callback rate-limited")
-        raise HTTPException(status_code=503, detail="Meta is rate-limiting requests, try again shortly")
+        raise HTTPException(status_code=429, detail="Meta is rate-limiting requests, try again shortly")
     except MetaGraphAPIError as e:
         logger.error("Meta OAuth callback failed: status=%s error_code=%s", e.status_code, e.meta_error_code)
         raise HTTPException(status_code=502, detail="Meta authentication failed")
@@ -189,14 +181,8 @@ def meta_refresh(secret: str = None, db: Session = Depends(get_db)):
         db.commit()
         return {"status": "refreshed"}
     except MetaRateLimitedError:
-        db.rollback()
         logger.warning("Meta token refresh rate-limited")
-        return {"status": "rate_limited"}
+        raise HTTPException(status_code=429, detail="Meta is rate-limiting requests, try again shortly")
     except MetaGraphAPIError as e:
-        db.rollback()
         logger.error("Meta token refresh failed: status=%s error_code=%s", e.status_code, e.meta_error_code)
-        return {"status": "error", "detail": "meta_api_error"}
-    except Exception as e:
-        db.rollback()
-        logger.error("Meta token refresh failed: %s", type(e).__name__)
-        return {"status": "error"}
+        raise HTTPException(status_code=502, detail="Meta token refresh failed")

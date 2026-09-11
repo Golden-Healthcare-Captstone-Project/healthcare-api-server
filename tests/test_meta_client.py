@@ -81,3 +81,15 @@ def test_graph_get_passes_timeout(mock_get):
 def test_graph_get_raises_graph_api_error_on_network_timeout(mock_get):
     with pytest.raises(MetaGraphAPIError):
         graph_get("https://graph.facebook.com/v19.0/me", {})
+
+
+@patch("app.meta_client.requests.get")
+def test_graph_get_raises_on_invalid_json_success_response(mock_get):
+    response = Mock(spec=requests.Response)
+    response.status_code = 200
+    response.ok = True
+    response.json.side_effect = ValueError("no JSON object could be decoded")
+    mock_get.return_value = response
+
+    with pytest.raises(MetaGraphAPIError):
+        graph_get("https://graph.facebook.com/v19.0/me", {"access_token": "x"})

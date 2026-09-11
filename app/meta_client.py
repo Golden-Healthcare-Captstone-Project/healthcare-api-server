@@ -57,7 +57,11 @@ def graph_get(url: str, params: dict) -> dict:
             raise MetaGraphAPIError(f"Network error calling Meta: {type(e).__name__}") from e
 
         if response.ok:
-            return response.json()
+            try:
+                return response.json()
+            except ValueError as e:
+                logger.error("Graph API returned non-JSON body for %s", url)
+                raise MetaGraphAPIError("Meta Graph API returned an invalid response") from e
 
         if _is_rate_limited(response):
             error_code = _meta_error_code(response)
