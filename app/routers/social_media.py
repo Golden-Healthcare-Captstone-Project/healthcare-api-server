@@ -21,11 +21,22 @@ def get_social_feed(db: Session = Depends(get_db)):
     url = f"https://graph.facebook.com/v19.0/{conn.page_id}/posts"
     params = {"access_token": conn.page_access_token}
 
+    
     try:
         return graph_get(url, params)
     except MetaRateLimitedError:
         logger.warning("Social feed fetch rate-limited for page_id=%s", conn.page_id)
-        raise HTTPException(status_code=429, detail="Meta is rate-limiting requests, try again shortly")
+        raise HTTPException(
+            status_code=429,
+            detail="Meta is rate-limiting requests, try again shortly"
+        )
     except MetaGraphAPIError as e:
-        logger.error("Social feed fetch failed: status=%s error_code=%s", e.status_code, e.meta_error_code)
-        raise HTTPException(status_code=502, detail="Failed to fetch social feed from Meta")
+        logger.error(
+            "Social feed fetch failed: status=%s error_code=%s",
+            e.status_code,
+            e.meta_error_code
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to fetch social feed from Meta"
+        )
