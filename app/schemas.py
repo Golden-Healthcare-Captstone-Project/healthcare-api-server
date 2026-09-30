@@ -12,3 +12,7 @@ class ServiceCreate(BaseModel):
     name: str = Field(..., min_length=1)
     description: Optional[str] = None
     price: float = Field(..., ge=0)
+
+
+class PaymentIntentCreate(BaseModel):
+    service_request_id: int = Field(..., ge=1)
