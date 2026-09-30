@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from .database import engine
 from .models import Base
-from .routers import meta_auth, requests, services, social_media
+from .routers import meta_auth, meta_webhook, requests, services, social_media
 
 logger = logging.getLogger(__name__)
 
@@ -54,3 +54,4 @@ app.include_router(social_media.router)
 app.include_router(services.router)
 app.include_router(requests.router)
 app.include_router(meta_auth.router)
+app.include_router(meta_webhook.router)
