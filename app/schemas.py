@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
 
@@ -18,9 +18,27 @@ class PaymentIntentCreate(BaseModel):
     service_request_id: int = Field(..., ge=1)
 
 class PostCreate(BaseModel):
-    author_id: int = Field(..., ge=1)
     text: str = Field(..., min_length=1, max_length=2000)
 
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError("Post text cannot be empty")
+
+        return value
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError("Post text cannot be empty")
+
+        return value
 
 class AuthorResponse(BaseModel):
     id: str

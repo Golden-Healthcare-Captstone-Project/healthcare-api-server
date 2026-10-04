@@ -34,9 +34,27 @@ except Exception:
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.warning("Validation error on %s %s: %s", request.method, request.url.path, exc.errors())
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    logger.warning(
+        "Validation error on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc.errors(),
+    )
 
+    errors = []
+
+    for error in exc.errors():
+        clean_error = {
+            key: value
+            for key, value in error.items()
+            if key != "ctx"
+        }
+        errors.append(clean_error)
+
+    return JSONResponse(
+        status_code=422,
+        content={"detail": errors},
+    )
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):

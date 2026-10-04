@@ -8,6 +8,8 @@ from ..meta_client import graph_get, MetaGraphAPIError, MetaRateLimitedError
 from ..models import MetaConnection, Post, User
 from ..schemas import PostCreate, PostResponse, FeedResponse
 
+from ..auth import get_current_user
+
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
@@ -86,18 +88,11 @@ def get_feed(
 @router.post("/feed", response_model=PostResponse, status_code=201)
 def create_post(
     post_data: PostCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    author = db.query(User).filter(User.id == post_data.author_id).first()
-
-    if not author:
-        raise HTTPException(
-            status_code=404,
-            detail="Author not found",
-        )
-
     post = Post(
-        author_id=post_data.author_id,
+        author_id=current_user.id,
         text=post_data.text,
     )
 
