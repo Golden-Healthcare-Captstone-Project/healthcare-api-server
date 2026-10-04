@@ -1,15 +1,33 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..meta_client import graph_get, MetaGraphAPIError, MetaRateLimitedError
-from ..models import MetaConnection
+from ..models import MetaConnection, Post, User
+from ..schemas import PostCreate, PostResponse, FeedResponse
 
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+def format_post(post: Post) -> PostResponse:
+    return PostResponse(
+        id=str(post.id),
+        author={
+            "id": str(post.author.id),
+            "name": f"{post.author.first_name} {post.author.last_name}",
+            "avatarUrl": "",
+            "role": post.author.role,
+        },
+        text=post.text,
+        createdAt=post.created_at.isoformat(),
+        likeCount=0,
+        commentCount=0,
+        shareCount=0,
+        likedByCurrentUser=False,
+    )
 
 
 @router.get("/social-feed")
@@ -40,3 +58,51 @@ def get_social_feed(db: Session = Depends(get_db)):
             status_code=502,
             detail="Failed to fetch social feed from Meta"
         )
+    
+@router.get("/feed", response_model=FeedResponse)
+def get_feed(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    total = db.query(Post).count()
+
+    posts = (
+        db.query(Post)
+        .order_by(Post.created_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    return FeedResponse(
+        posts=[format_post(post) for post in posts],
+        page=page,
+        limit=limit,
+        total=total,
+        hasNext=page * limit < total,
+    )
+
+@router.post("/feed", response_model=PostResponse, status_code=201)
+def create_post(
+    post_data: PostCreate,
+    db: Session = Depends(get_db),
+):
+    author = db.query(User).filter(User.id == post_data.author_id).first()
+
+    if not author:
+        raise HTTPException(
+            status_code=404,
+            detail="Author not found",
+        )
+
+    post = Post(
+        author_id=post_data.author_id,
+        text=post_data.text,
+    )
+
+    db.add(post)
+    db.commit()
+    db.refresh(post)
+
+    return format_post(post)

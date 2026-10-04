@@ -17,6 +17,7 @@ class User(Base):
 
     service_requests = relationship("ServiceRequest", back_populates="user")
     payments = relationship("Payment", back_populates="user")
+    posts = relationship("Post", back_populates="author")
 
 
 class Service(Base):
@@ -60,6 +61,15 @@ class Payment(Base):
     user = relationship("User", back_populates="payments")
     service_request = relationship("ServiceRequest", back_populates="payment")
 
+class Post(Base):
+    __tablename__ = "posts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    text = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    author = relationship("User", back_populates="posts")
 
 class MetaConnection(Base):
     __tablename__ = "meta_connections"
