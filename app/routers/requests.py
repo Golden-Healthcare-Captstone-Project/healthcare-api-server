@@ -1,10 +1,11 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..rate_limit import limiter
 from ..models import Service, ServiceRequest, User
 from ..schemas import ServiceRequestCreate
 
@@ -14,16 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/", status_code=201)
-def create_service_request(request: ServiceRequestCreate, db: Session = Depends(get_db)):
-    if not db.query(User).filter(User.id == request.user_id).first():
-        raise HTTPException(status_code=404, detail=f"User {request.user_id} not found")
-    if not db.query(Service).filter(Service.id == request.service_id).first():
-        raise HTTPException(status_code=404, detail=f"Service {request.service_id} not found")
+@limiter.limit("20/minute")
+def create_service_request(request: Request, payload: ServiceRequestCreate, db: Session = Depends(get_db)):
+    if not db.query(User).filter(User.id == payload.user_id).first():
+        raise HTTPException(status_code=404, detail=f"User {payload.user_id} not found")
+    if not db.query(Service).filter(Service.id == payload.service_id).first():
+        raise HTTPException(status_code=404, detail=f"Service {payload.service_id} not found")
 
     new_request = ServiceRequest(
-        user_id=request.user_id,
-        service_id=request.service_id,
-        notes=request.notes
+        user_id=payload.user_id,
+        service_id=payload.service_id,
+        notes=payload.notes
     )
     try:
         db.add(new_request)

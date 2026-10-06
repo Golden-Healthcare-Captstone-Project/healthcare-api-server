@@ -8,18 +8,29 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
+from . import config
 from .database import engine
 from .models import Base
+from .rate_limit import limiter
 from .routers import meta_auth, meta_webhook, payments, requests, services, social_media
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+allowed_origins = ["http://localhost:4200"]
+if config.ALLOWED_ORIGIN:
+    allowed_origins.append(config.ALLOWED_ORIGIN)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,6 +77,14 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    logger.warning("Rate limit exceeded on %s %s: %s", request.method, request.url.path, exc.detail)
+    response = JSONResponse(status_code=429, content={"detail": "Too many requests, please try again later"})
+    response.headers["Retry-After"] = "60"
+    return response
 
 
 app.include_router(social_media.router)

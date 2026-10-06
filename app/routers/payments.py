@@ -1,12 +1,13 @@
 import logging
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .. import config
 from ..database import get_db
+from ..rate_limit import limiter
 from ..models import Payment, Service, ServiceRequest
 from ..schemas import PaymentIntentCreate
 
@@ -45,7 +46,8 @@ def _intent_payload(payment: Payment, intent) -> dict:
 
 
 @router.post("/intent", status_code=201)
-def create_payment_intent(payload: PaymentIntentCreate, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def create_payment_intent(request: Request, payload: PaymentIntentCreate, db: Session = Depends(get_db)):
     service_request = db.query(ServiceRequest).filter(ServiceRequest.id == payload.service_request_id).first()
     if service_request is None:
         raise HTTPException(status_code=404, detail="Service request not found")
@@ -122,7 +124,8 @@ def create_payment_intent(payload: PaymentIntentCreate, db: Session = Depends(ge
 
 
 @router.post("/{payment_id}/complete")
-def complete_payment(payment_id: int, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def complete_payment(request: Request, payment_id: int, db: Session = Depends(get_db)):
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if payment is None or not payment.transaction_id:
         raise HTTPException(status_code=404, detail="Payment not found")
