@@ -56,6 +56,8 @@ class Payment(Base):
     amount = Column(Float, nullable=False)
     status = Column(String, default="pending")  # pending, paid, failed
     transaction_id = Column(String)
+    provider = Column(String, default="stripe", server_default="stripe")
+    currency = Column(String, default="usd", server_default="usd")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="payments")

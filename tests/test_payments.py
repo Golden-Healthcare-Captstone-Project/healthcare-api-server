@@ -45,6 +45,7 @@ def db_factory(monkeypatch):
 
     monkeypatch.setattr(config, "STRIPE_SECRET_KEY", "sk_test")
     monkeypatch.setattr(config, "STRIPE_PUBLISHABLE_KEY", "pk_test")
+    monkeypatch.setattr(config, "PAYMENT_PROVIDER", "stripe")
     app.dependency_overrides[get_db] = _override_get_db
     yield TestingSessionLocal
     app.dependency_overrides.pop(get_db, None)
@@ -86,12 +87,15 @@ def test_create_intent_charges_service_price(db_factory, monkeypatch):
     assert response.status_code == 201
     body = response.json()
     assert body["client_secret"] == "sec_test"
-    assert body["publishable_key"] == "pk_test"
+    assert body["provider"] == "stripe"
+    assert body["next_action"] == "client_confirm"
+    assert body["client_config"] == {"publishable_key": "pk_test"}
     assert body["amount"] == 25.0
     assert body["currency"] == "usd"
     assert captured["amount"] == 2500
     assert captured["currency"] == "usd"
     assert captured["payment_method_types"] == ["card"]
+    assert captured["idempotency_key"].startswith("payment-")
 
     db = db_factory()
     payment = db.query(Payment).one()
