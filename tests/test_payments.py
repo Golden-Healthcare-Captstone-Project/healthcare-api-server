@@ -16,7 +16,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models import Payment, Service, ServiceRequest, User
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-User-Id": "1"})  # user 1 is the seeded older_adult
 
 
 class FakeIntent:
@@ -106,6 +106,7 @@ def test_create_intent_charges_service_price(db_factory, monkeypatch):
 
 
 def test_create_intent_missing_request(db_factory):
+    _seed(db_factory)
     response = client.post("/payments/intent", json={"service_request_id": 99})
     assert response.status_code == 404
 
@@ -186,5 +187,6 @@ def test_complete_marks_payment_paid(db_factory, monkeypatch):
 
 
 def test_complete_missing_payment(db_factory):
+    _seed(db_factory)
     response = client.post("/payments/999/complete")
     assert response.status_code == 404

@@ -15,7 +15,7 @@ from . import config
 from .database import engine
 from .models import Base
 from .rate_limit import limiter
-from .routers import meta_auth, meta_webhook, payments, requests, services, social_media
+from .routers import accounts, meta_auth, meta_webhook, payments, requests, services, social_media
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +93,4 @@ app.include_router(requests.router)
 app.include_router(meta_auth.router)
 app.include_router(meta_webhook.router)
 app.include_router(payments.router)
+app.include_router(accounts.router)

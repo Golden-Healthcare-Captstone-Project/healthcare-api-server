@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from .. import config
 from ..database import get_db
 from ..rate_limit import limiter
-from ..models import Payment, Service, ServiceRequest
+from ..models import Payment, Service, ServiceRequest, User
+from ..permissions import Permission, can_access_owner, has_permission, require_permission
 from ..payment_providers import get_provider
 from ..payment_providers.base import (
     CANCELED,
@@ -70,6 +71,19 @@ def _commit(db: Session, payment: Payment, detail: str) -> None:
         raise HTTPException(status_code=500, detail=detail)
 
 
+def _owned_payment(db: Session, user: User, payment_id: int, *, admin_ok: bool) -> Payment:
+    """Load a payment the caller may see, or 404 (never reveal that it exists)."""
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if admin_ok and has_permission(user, Permission.VIEW_ALL_PAYMENTS):
+        return payment
+    service_request = db.query(ServiceRequest).filter(ServiceRequest.id == payment.service_request_id).first()
+    if service_request is None or not can_access_owner(db, user, service_request.user_id):
+        raise HTTPException(status_code=404, detail="Payment not found")
+    return payment
+
+
 def _intent_payload(payment: Payment, intent: ProviderIntent) -> dict:
     return {
         "payment_id": payment.id,
@@ -97,7 +111,12 @@ def _payment_payload(payment: Payment) -> dict:
 
 @router.post("/intent", status_code=201)
 @limiter.limit("10/minute")
-def create_payment_intent(request: Request, payload: PaymentIntentCreate, db: Session = Depends(get_db)):
+def create_payment_intent(
+    request: Request,
+    payload: PaymentIntentCreate,
+    current_user: User = Depends(require_permission(Permission.MAKE_PAYMENT)),
+    db: Session = Depends(get_db),
+):
     # Row lock serializes concurrent intents for one request (no-op on SQLite),
     # so two tabs cannot both create a charge.
     service_request = (
@@ -106,7 +125,7 @@ def create_payment_intent(request: Request, payload: PaymentIntentCreate, db: Se
         .with_for_update()
         .first()
     )
-    if service_request is None:
+    if service_request is None or not can_access_owner(db, current_user, service_request.user_id):
         raise HTTPException(status_code=404, detail="Service request not found")
 
     service = db.query(Service).filter(Service.id == service_request.service_id).first()
@@ -237,10 +256,13 @@ async def payment_webhook(request: Request, provider_name: str, db: Session = De
 
 @router.get("/{payment_id}")
 @limiter.limit("30/minute")
-def get_payment(request: Request, payment_id: int, db: Session = Depends(get_db)):
-    payment = db.query(Payment).filter(Payment.id == payment_id).first()
-    if payment is None:
-        raise HTTPException(status_code=404, detail="Payment not found")
+def get_payment(
+    request: Request,
+    payment_id: int,
+    current_user: User = Depends(require_permission(Permission.VIEW_PAYMENT)),
+    db: Session = Depends(get_db),
+):
+    payment = _owned_payment(db, current_user, payment_id, admin_ok=True)
 
     if payment.status == "pending" and payment.transaction_id:
         _reconcile(db, payment, strict=False)
@@ -250,9 +272,14 @@ def get_payment(request: Request, payment_id: int, db: Session = Depends(get_db)
 
 @router.post("/{payment_id}/complete")
 @limiter.limit("10/minute")
-def complete_payment(request: Request, payment_id: int, db: Session = Depends(get_db)):
-    payment = db.query(Payment).filter(Payment.id == payment_id).first()
-    if payment is None or not payment.transaction_id:
+def complete_payment(
+    request: Request,
+    payment_id: int,
+    current_user: User = Depends(require_permission(Permission.MAKE_PAYMENT)),
+    db: Session = Depends(get_db),
+):
+    payment = _owned_payment(db, current_user, payment_id, admin_ok=False)
+    if not payment.transaction_id:
         raise HTTPException(status_code=404, detail="Payment not found")
 
     _reconcile(db, payment, strict=True)

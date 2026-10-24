@@ -23,7 +23,7 @@ from app.payment_providers.base import (
     WebhookVerificationError,
 )
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-User-Id": "1"})  # user 1 is the seeded older_adult
 
 
 class RedirectProvider(PaymentProvider):
@@ -191,6 +191,7 @@ def test_settled_payment_not_reopened_by_replay(db_factory, monkeypatch):
 
 
 def test_get_payment_missing(db_factory):
+    _seed(db_factory)
     assert client.get("/payments/999").status_code == 404
 
 

@@ -1,5 +1,8 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from typing import Literal, Optional
+
+RoleName = Literal["older_adult", "caregiver", "provider", "admin"]
+RequestStatus = Literal["pending", "approved", "rejected", "completed"]
 
 
 class ServiceRequestCreate(BaseModel):
@@ -12,6 +15,27 @@ class ServiceCreate(BaseModel):
     name: str = Field(..., min_length=1)
     description: Optional[str] = None
     price: float = Field(..., ge=0)
+
+
+class RequestStatusUpdate(BaseModel):
+    status: RequestStatus
+
+
+class UserCreate(BaseModel):
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    email: EmailStr
+    role: RoleName
+
+
+class RoleUpdate(BaseModel):
+    role: RoleName
+
+
+class CaregiverLinkCreate(BaseModel):
+    caregiver_id: int = Field(..., ge=1)
+    older_adult_id: int = Field(..., ge=1)
+    relationship_note: Optional[str] = Field(default=None, max_length=100)
 
 
 class PaymentIntentCreate(BaseModel):

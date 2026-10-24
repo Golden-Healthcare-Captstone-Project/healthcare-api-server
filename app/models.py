@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -18,6 +18,19 @@ class User(Base):
     service_requests = relationship("ServiceRequest", back_populates="user")
     payments = relationship("Payment", back_populates="user")
     posts = relationship("Post", back_populates="author")
+
+
+class CaregiverLink(Base):
+    """A caregiver account that may act on behalf of an older adult account."""
+
+    __tablename__ = "caregiver_links"
+    __table_args__ = (UniqueConstraint("caregiver_id", "older_adult_id", name="uq_caregiver_older_adult"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    caregiver_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    older_adult_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    relationship_note = Column(String)  # e.g. daughter, neighbour
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Service(Base):

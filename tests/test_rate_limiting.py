@@ -1,42 +1,24 @@
 import os
-from unittest.mock import MagicMock, Mock
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import Service, User
-from app.routers import requests as requests_router
 
 client = TestClient(app)
 
 
-def _fake_db():
-    db = MagicMock()
+def test_create_service_request_returns_429_after_limit_exceeded(db_factory):
+    from tests.helpers import add_service, add_user, hdr
 
-    def query_side_effect(model):
-        query_mock = MagicMock()
-        if model is User:
-            query_mock.filter.return_value.first.return_value = Mock()
-        elif model is Service:
-            query_mock.filter.return_value.first.return_value = Mock()
-        return query_mock
-
-    db.query.side_effect = query_side_effect
-    db.refresh.side_effect = lambda obj: setattr(obj, "id", 1)
-    return db
-
-
-def test_create_service_request_returns_429_after_limit_exceeded():
-    app.dependency_overrides[requests_router.get_db] = lambda: _fake_db()
+    user = add_user(db_factory, "older_adult")
+    service = add_service(db_factory)
 
     responses = [
-        client.post("/requests/", json={"user_id": 1, "service_id": 1})
+        client.post("/requests/", json={"user_id": user, "service_id": service}, headers=hdr(user))
         for _ in range(21)
     ]
-
-    app.dependency_overrides.pop(requests_router.get_db, None)
 
     assert [r.status_code for r in responses[:20]] == [201] * 20
     assert responses[20].status_code == 429

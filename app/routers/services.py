@@ -5,7 +5,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Service
+from ..models import Service, User
+from ..permissions import Permission, require_permission
 from ..schemas import ServiceCreate
 
 router = APIRouter()
@@ -19,7 +20,11 @@ def get_services(db: Session = Depends(get_db)):
 
 
 @router.post("/services", status_code=201)
-def create_service(service: ServiceCreate, db: Session = Depends(get_db)):
+def create_service(
+    service: ServiceCreate,
+    _admin: User = Depends(require_permission(Permission.MANAGE_SERVICES)),
+    db: Session = Depends(get_db),
+):
     new_service = Service(
         name=service.name,
         description=service.description,

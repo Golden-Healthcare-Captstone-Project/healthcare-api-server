@@ -7,7 +7,7 @@ Scope: the processor-agnostic payment work (`app/payment_providers/`, `app/route
 | # | Severity | Finding | Status |
 |---|----------|---------|--------|
 | 1 | High | **A declined card could leave a charged order marked `failed`.** Stripe emits `payment_intent.payment_failed` for every declined attempt, but the intent stays usable. The first version treated that as final, so a later successful retry was ignored. | Fixed |
-| 2 | High | **No authentication or ownership checks** on payment, request and service routes. `get_current_user` is a placeholder (`X-User-Id` header) used by one route; `/requests/` takes `user_id` in the body; the frontend hardcodes `user_id: 1`. Anyone who can guess a sequential payment or request id can create intents for it or read its status. `POST /services` is also public. | Reported |
+| 2 | High | **No authentication or ownership checks** on payment, request and service routes. `get_current_user` is a placeholder (`X-User-Id` header); `/requests/` took `user_id` in the body; the frontend hardcoded `user_id: 1`. Anyone who could guess a sequential payment or request id could create intents for it or read its status. `POST /services` was public. | **Partly fixed** by the accounts and permissions work (see `accounts-and-permissions.md`): roles, ownership checks on requests and payments, admin-only service creation. Still open: identity is the spoofable `X-User-Id` header until real sign-in exists. |
 | 3 | Medium | **Double charge race.** Two concurrent `POST /payments/intent` for one request could both create an intent. | Fixed (row lock; effective on PostgreSQL, a no-op on SQLite) |
 | 4 | Medium | **Mock provider could settle payments for anyone who knows its secret** (`mock-secret`, default and hardcoded in the dev gateway) if enabled in a real deployment. | Fixed (refuses to run when `VERCEL_ENV=production`; logs a warning when enabled; only active when `PAYMENT_PROVIDER=mock`) |
 | 5 | Medium | **Unauthenticated status endpoint leaked internal ids** (`transaction_id`, `service_request_id`) by sequential id. | Fixed (returns only payment id, provider, status, amount, currency) |
@@ -52,6 +52,7 @@ Scope: the processor-agnostic payment work (`app/payment_providers/`, `app/route
 Not covered: the real Stripe SDK and real Stripe webhooks (no test keys were used), concurrent intent creation on PostgreSQL, and any other browser than Chromium.
 
 ## Recommended order of follow-up
+0. Real sign-in. Until it exists, the role checks stop mistakes and casual misuse but not a determined caller who sets the header.
 1. Upgrade starlette/urllib3/requests and the Angular 19 advisories (items 8, 9).
 2. Add real authentication and ownership checks (item 2), then drop the public status endpoint's reliance on obscurity.
 3. Before launch with Stripe: set `STRIPE_WEBHOOK_SECRET`, point Stripe at `/payments/webhook/stripe`, run the Stripe test-card cases, and add the CSP.
